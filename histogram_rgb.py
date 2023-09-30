@@ -6,14 +6,18 @@ from PyQt5.QtGui import QPixmap, QImage
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
+
 class HistogramDialog(QDialog):
     def __init__(self, image_path):
         super().__init__()
-        
+
         self.imageObj = cv2.imread(image_path)
-        self.blue_color = cv2.calcHist([self.imageObj], [0], None, [256], [0, 256])
-        self.red_color = cv2.calcHist([self.imageObj], [1], None, [256], [0, 256])
-        self.green_color = cv2.calcHist([self.imageObj], [2], None, [256], [0, 256])
+        self.blue_color = cv2.calcHist(
+            [self.imageObj], [0], None, [256], [0, 256])
+        self.red_color = cv2.calcHist(
+            [self.imageObj], [1], None, [256], [0, 256])
+        self.green_color = cv2.calcHist(
+            [self.imageObj], [2], None, [256], [0, 256])
 
         self.initUI()
 
@@ -52,6 +56,7 @@ class HistogramDialog(QDialog):
         canvas = FigureCanvas(fig)
         return canvas
 
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-
+    sys.exit(app.exec_())

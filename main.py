@@ -1,24 +1,45 @@
 import sys
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import QPixmap, QImage, QColor
-from PyQt5.QtWidgets import QFileDialog, QMessageBox, QDialog, QInputDialog
+from PyQt5.QtWidgets import QFileDialog, QMessageBox, QDialog, QInputDialog, QSlider, QVBoxLayout, QLabel
 from aritmatika import Ui_Dialog
-import numpy as np
-import matplotlib.pyplot as plt
+# import numpy as np
+# import matplotlib.pyplot as plt
+from PyQt5.QtCore import Qt
 from histogram_rgb import HistogramDialog
+from brightness import BrightnessDialog
 
 
 class Ui_MainWindow(object):
 
+    def bright(self):
+        print('ini bright')
+
+    def brightnes(self):
+        if self.label_gambar_asal.pixmap() is not None:
+            self.brightnes_dialog = BrightnessDialog(main_window=self)
+            self.brightnes_dialog.exec_()
+        else:
+            QMessageBox.warning(
+                MainWindow, "Peringatan", "Tidak ada gambar yang dibuka.")
+
+    def contrast(self):
+        result = self.brightnes_dialog.getValue()
+        print(f"Nilai dari BrightnessDialog: {result}")
+        print('contrast')
+
     # todo histogram input
     def histogram_input(self):
-        dialog = HistogramDialog(self.directory_input)
-        dialog.exec_()
+        print('test 1')
+        self.histogram_input_dialog = HistogramDialog(
+            self.directory_input)
+        self.histogram_input_dialog.show()
 
     def histogram_output(self):
+        print('test 2')
         if hasattr(self, 'directory_input'):
             output_file = "output.jpg"  # Nama file output yang akan digunakan
-            pixmap = self.label_gambar_asal.pixmap()
+            pixmap = self.label_gambar_tujuan.pixmap()
 
             if pixmap:
                 # Mengambil QImage dari pixmap
@@ -26,7 +47,8 @@ class Ui_MainWindow(object):
 
                 # Simpan QImage sebagai file jpg
                 if image.save(output_file, "jpg"):
-                    print('tersimpan')
+                    self.histogram_output_dialog = HistogramDialog(output_file)
+                    self.histogram_output_dialog.show()
                 else:
                     QtWidgets.QMessageBox.critical(
                         None, "Error", "Gagal menyimpan gambar.")
@@ -37,7 +59,12 @@ class Ui_MainWindow(object):
             QtWidgets.QMessageBox.critical(
                 None, "Error", "Tidak ada gambar yang dimuat.")
 
+    def histogram_input_output(self):
+        self.histogram_input()
+        self.histogram_output()
+
     # todo translasi
+
     def translasi(self):
         original_pixmap = self.label_gambar_asal.pixmap()
         if original_pixmap:
@@ -394,12 +421,21 @@ class Ui_MainWindow(object):
                 QMessageBox.warning(
                     MainWindow, "Peringatan", "Tidak ada gambar yang ditampilkan untuk disimpan.")
 
+    def onSliderChange(self, value):
+        # Metode yang akan dipanggil saat nilai slider berubah
+        # print(f"Nilai Slider: {value}")
+        self.sliderLabel.setText(str(value))
+        # Anda dapat menambahkan kode lain di sini sesuai kebutuhan
+
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1000, 650)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.directory_input = "/path/to/your/default/directory"
         self.directory_output = "/path/to/your/default/directory"
+        self.histogram_input_dialog = None  # Inisialisasi dialog
+        self.histogram_output_dialog = None  # Inisialisasi dialog
+        self.brightnes_dialog = None  # Inisialisasi dialog
         self.centralwidget.setObjectName("centralwidget")
         self.verticalLayoutWidget = QtWidgets.QWidget(self.centralwidget)
         self.verticalLayoutWidget.setGeometry(QtCore.QRect(20, 60, 460, 460))
@@ -442,8 +478,8 @@ class Ui_MainWindow(object):
         self.menuRGB.setObjectName("menuRGB")
         self.menuRGB_to_Grayscale = QtWidgets.QMenu(self.menuColor)
         self.menuRGB_to_Grayscale.setObjectName("menuRGB_to_Grayscale")
-        self.menuBrightness = QtWidgets.QMenu(self.menuColor)
-        self.menuBrightness.setObjectName("menuBrightness")
+        self.actionBrightness = QtWidgets.QAction(self.menuColor)
+        self.actionBrightness.setObjectName("actionBrightness")
         self.menuBit_Depth = QtWidgets.QMenu(self.menuColor)
         self.menuBit_Depth.setObjectName("menuBit_Depth")
         self.menuTentang = QtWidgets.QMenu(self.menubar)
@@ -479,9 +515,6 @@ class Ui_MainWindow(object):
         self.simpanSebagai.setObjectName("simpanSebagai")
         self.actionKeluar = QtWidgets.QAction(MainWindow)
         self.actionKeluar.setObjectName("actionKeluar")
-        self.actionBrightness_Contrast = QtWidgets.QAction(MainWindow)
-        self.actionBrightness_Contrast.setObjectName(
-            "actionBrightness_Contrast")
         self.actionInvers = QtWidgets.QAction(MainWindow)
         self.actionInvers.setObjectName("actionInvers")
         self.actionLog_Brightness = QtWidgets.QAction(MainWindow)
@@ -531,8 +564,8 @@ class Ui_MainWindow(object):
         self.actionFlippingHorizontal.setObjectName("actionFlippingHorizontal")
         self.actionFlippingVertical = QtWidgets.QAction(MainWindow)
         self.actionFlippingVertical.setObjectName("actionFlippingVertical")
-        self.actionContras = QtWidgets.QAction(MainWindow)
-        self.actionContras.setObjectName("actionContras")
+        self.actionContrast = QtWidgets.QAction(MainWindow)
+        self.actionContrast.setObjectName("actionContrast")
         self.action1_Bit = QtWidgets.QAction(MainWindow)
         self.action1_Bit.setObjectName("action1_Bit")
         self.action2_Bit = QtWidgets.QAction(MainWindow)
@@ -605,7 +638,6 @@ class Ui_MainWindow(object):
         self.menuRGB_to_Grayscale.addAction(self.actionAverage)
         self.menuRGB_to_Grayscale.addAction(self.actionLightness)
         self.menuRGB_to_Grayscale.addAction(self.actionLuminance)
-        self.menuBrightness.addAction(self.actionContras)
         self.menuBit_Depth.addAction(self.action1_Bit)
         self.menuBit_Depth.addAction(self.action2_Bit)
         self.menuBit_Depth.addAction(self.action3_Bit)
@@ -615,8 +647,10 @@ class Ui_MainWindow(object):
         self.menuBit_Depth.addAction(self.action7_Bit)
         self.menuColor.addAction(self.menuRGB.menuAction())
         self.menuColor.addAction(self.menuRGB_to_Grayscale.menuAction())
-        self.menuColor.addAction(self.menuBrightness.menuAction())
-        self.menuColor.addAction(self.actionBrightness_Contrast)
+        self.menuColor.addAction(self.actionBrightness)
+        self.menuColor.addAction(self.actionContrast)
+
+        # self.menuColor.addAction(self.menuBrightness.menuAction())
         self.menuColor.addAction(self.actionInvers)
         self.menuColor.addAction(self.actionLog_Brightness)
         self.menuColor.addAction(self.menuBit_Depth.menuAction())
@@ -687,6 +721,25 @@ class Ui_MainWindow(object):
         self.menubar.addAction(self.menuMorfologi.menuAction())
         self.menubar.addAction(self.menuGeometri.menuAction())
 
+        # self.verticalLayoutWidget3 = QtWidgets.QWidget(MainWindow)
+        # self.verticalLayoutWidget3.setGeometry(QtCore.QRect(340, 580, 300, 60))
+        # self.verticalLayoutWidget3.setObjectName("verticalLayoutWidget3")
+        # self.verticalLayout3 = QtWidgets.QVBoxLayout(
+        #     self.verticalLayoutWidget3)
+        # self.verticalLayout3.setContentsMargins(0, 0, 0, 0)
+        # self.verticalLayout3.setObjectName("verticalLayout3")
+        # self.slider = QtWidgets.QSlider(self.verticalLayoutWidget3)
+        # self.slider.setOrientation(Qt.Horizontal)
+        # self.slider.setMinimum(0)  # Atur nilai terkecil menjadi 0
+        # self.slider.setMaximum(255)  # Atur nilai terbesar menjadi 100
+        # self.slider.setGeometry(QtCore.QRect(0, 0, 80, 30))
+        # self.verticalLayout3.addWidget(self.slider)
+        # self.sliderLabel = QtWidgets.QLabel(self.verticalLayoutWidget3)
+        # self.sliderLabel.setAlignment(Qt.AlignCenter)
+        # self.sliderLabel.setText("0")
+        # self.verticalLayout3.addWidget(self.sliderLabel)
+        # self.slider.valueChanged.connect(self.onSliderChange)
+
         # todo start tambahan saya
         self.actionBukaFile.triggered.connect(self.buka_file)
         self.simpanSebagai.triggered.connect(self.simpan_sebagai)
@@ -704,6 +757,9 @@ class Ui_MainWindow(object):
         self.actionRotasi.triggered.connect(self.rotasi)
         self.actionInput.triggered.connect(self.histogram_input)
         self.actionOutput.triggered.connect(self.histogram_output)
+        self.actionInput_Output.triggered.connect(self.histogram_input_output)
+        self.actionBrightness.triggered.connect(self.brightnes)
+        self.actionContrast.triggered.connect(self.contrast)
 
         # todo end tambahan saya
 
@@ -722,7 +778,8 @@ class Ui_MainWindow(object):
             _translate("MainWindow", "RGB to Grayscale"))
         self.menuFlipping.setTitle(
             _translate("MainWindow", "Flipping"))
-        self.menuBrightness.setTitle(_translate("MainWindow", "Brightness"))
+        self.actionBrightness.setText(
+            _translate("MainWindow", "Brightness"))
         self.menuBit_Depth.setTitle(_translate("MainWindow", "Bit Depth"))
         self.menuTentang.setTitle(_translate("MainWindow", "Tentang"))
         self.menuImage_Processing.setTitle(
@@ -744,8 +801,8 @@ class Ui_MainWindow(object):
         self.menuClosing.setTitle(_translate("MainWindow", "Closing"))
         self.simpanSebagai.setText(_translate("MainWindow", "Simpan sebagai"))
         self.actionKeluar.setText(_translate("MainWindow", "Keluar"))
-        self.actionBrightness_Contrast.setText(
-            _translate("MainWindow", "Brightness-Contrast"))
+        self.actionContrast.setText(
+            _translate("MainWindow", "Contrast"))
         self.actionInvers.setText(_translate("MainWindow", "Invers"))
         self.actionLog_Brightness.setText(
             _translate("MainWindow", "Log Brightness"))
@@ -790,7 +847,6 @@ class Ui_MainWindow(object):
         self.actionAverage.setText(_translate("MainWindow", "Average"))
         self.actionLightness.setText(_translate("MainWindow", "Lightness"))
         self.actionLuminance.setText(_translate("MainWindow", "Luminance"))
-        self.actionContras.setText(_translate("MainWindow", "Contras"))
         self.action1_Bit.setText(_translate("MainWindow", "1 Bit"))
         self.action2_Bit.setText(_translate("MainWindow", "2 Bit"))
         self.action3_Bit.setText(_translate("MainWindow", "3 Bit"))
