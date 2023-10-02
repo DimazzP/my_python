@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QDialog, QApplication, QMainWindow, QWidget, QVBoxLayout, QPushButton, QLabel, QSlider
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QPushButton, QLabel, QSlider
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap, QImage, QColor
 
@@ -34,9 +34,7 @@ class BrightnessDialog(QDialog):
         self.slider.valueChanged.connect(self.onSliderChange)
 
     def onOkButtonClicked(self):
-        print('test lagi')
         if self.main_window:
-            self.main_window.bright()
             pixmap = self.main_window.label_gambar_asal.pixmap()
             image = pixmap.toImage()
             width = image.width()
@@ -55,7 +53,6 @@ class BrightnessDialog(QDialog):
             pixmap_grayscale = QPixmap.fromImage(image)
             self.main_window.label_gambar_tujuan.setPixmap(pixmap_grayscale)
             self.main_window.label_gambar_tujuan.setScaledContents(True)
-            print('sudah luminance')
 
     def getValue(self):
         print('custom')

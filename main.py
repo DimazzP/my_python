@@ -1,19 +1,735 @@
 import sys
+import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtGui import QPixmap, QImage, QColor
+from PyQt5.QtGui import QPixmap, QImage, QColor, qRgb
 from PyQt5.QtWidgets import QFileDialog, QMessageBox, QDialog, QInputDialog, QSlider, QVBoxLayout, QLabel
 from aritmatika import Ui_Dialog
-# import numpy as np
 # import matplotlib.pyplot as plt
-from PyQt5.QtCore import Qt
 from histogram_rgb import HistogramDialog
 from brightness import BrightnessDialog
+from contrast import ContrastDialog
+from functools import partial
+from scipy.ndimage import convolve
 
 
 class Ui_MainWindow(object):
 
-    def bright(self):
-        print('ini bright')
+    def unsharp_masking(self):
+        pixmap = self.label_gambar_asal.pixmap()
+        if pixmap:
+            img = pixmap.toImage()
+            width = img.width()
+            height = img.height()
+
+            # Buat kernel Gaussian 5x5
+            gaussian_kernel = [
+                [1, 4, 6, 4, 1],
+                [4, 16, 24, 16, 4],
+                [6, 24, 36, 24, 6],
+                [4, 16, 24, 16, 4],
+                [1, 4, 6, 4, 1]
+            ]
+
+            # Buat gambar baru untuk menyimpan hasil Gaussian Blur
+            gaussian_blur_img = QtGui.QImage(
+                width, height, QtGui.QImage.Format_RGB32)
+
+            for x in range(width):
+                for y in range(height):
+                    r, g, b = 0, 0, 0
+                    for i in range(-2, 3):
+                        for j in range(-2, 3):
+                            px = x + i
+                            py = y + j
+
+                            if 0 <= px < width and 0 <= py < height:
+                                pixel_color = QtGui.QColor(img.pixel(px, py))
+                                weight = gaussian_kernel[i + 2][j + 2]
+                                r += pixel_color.red() * weight
+                                g += pixel_color.green() * weight
+                                b += pixel_color.blue() * weight
+
+                    r //= 256  # Normalisasi hasil konvolusi
+                    g //= 256
+                    b //= 256
+
+                    # Tetapkan nilai piksel baru ke gambar hasil Gaussian Blur
+                    gaussian_blur_img.setPixel(x, y, QtGui.qRgb(r, g, b))
+
+            # Buat gambar untuk menyimpan hasil unsharp masking
+            unsharp_masked_img = QtGui.QImage(
+                width, height, QtGui.QImage.Format_RGB32)
+
+            # Hitung perbedaan antara gambar asli dan gambar Gaussian Blur
+            for x in range(width):
+                for y in range(height):
+                    original_color = QtGui.QColor(img.pixel(x, y))
+                    blurred_color = QtGui.QColor(gaussian_blur_img.pixel(x, y))
+
+                    r = original_color.red() - blurred_color.red()
+                    g = original_color.green() - blurred_color.green()
+                    b = original_color.blue() - blurred_color.blue()
+
+                    # Tambahkan perbedaan ke gambar hasil
+                    unsharp_masked_img.setPixel(x, y, QtGui.qRgb(r, g, b))
+
+            # Setel gambar hasil unsharp masking ke label atau tempat yang sesuai
+            ouput_pixmap = QPixmap.fromImage(unsharp_masked_img)
+            self.label_gambar_tujuan.setPixmap(ouput_pixmap)
+            self.label_gambar_tujuan.setScaledContents(True)
+
+    def sharpen(self):
+        pixmap = self.label_gambar_asal.pixmap()
+        if pixmap:
+            img = pixmap.toImage()
+            width = img.width()
+            height = img.height()
+
+            # Buat kernel custom sharpening 3x3
+            sharpen_kernel = [
+                [0, -1, 0],
+                [-1, 5, -1],
+                [0, -1, 0]
+            ]
+
+            # Buat gambar baru untuk menyimpan hasil custom sharpening
+            sharpened_img = QtGui.QImage(
+                width, height, QtGui.QImage.Format_RGB32)
+
+            for x in range(width):
+                for y in range(height):
+                    r, g, b = 0, 0, 0
+                    for i in range(-1, 2):
+                        for j in range(-1, 2):
+                            px = x + i
+                            py = y + j
+
+                            if 0 <= px < width and 0 <= py < height:
+                                pixel_color = QtGui.QColor(img.pixel(px, py))
+                                weight = sharpen_kernel[i + 1][j + 1]
+                                r += pixel_color.red() * weight
+                                g += pixel_color.green() * weight
+                                b += pixel_color.blue() * weight
+
+                    r = max(0, min(r, 255))  # Clamp the values to 0-255
+                    g = max(0, min(g, 255))
+                    b = max(0, min(b, 255))
+
+                    # Setel nilai piksel baru ke gambar hasil
+                    sharpened_img.setPixel(x, y, QtGui.qRgb(r, g, b))
+
+            # Setel gambar hasil custom sharpening ke label atau tempat yang sesuai
+            ouput_pixmap = QPixmap.fromImage(sharpened_img)
+            self.label_gambar_tujuan.setPixmap(ouput_pixmap)
+            self.label_gambar_tujuan.setScaledContents(True)
+
+    def edge_detection_sobel(self):
+        pixmap = self.label_gambar_asal.pixmap()
+        if pixmap:
+            img = pixmap.toImage()
+            width = img.width()
+            height = img.height()
+
+            # Buat kernel Sobel untuk deteksi tepi horizontal
+            sobel_kernel_x = [
+                [-1, 0, 1],
+                [-2, 0, 2],
+                [-1, 0, 1]
+            ]
+
+            # Buat kernel Sobel untuk deteksi tepi vertikal
+            sobel_kernel_y = [
+                [1, 2, 1],
+                [0, 0, 0],
+                [-1, -2, -1]
+            ]
+
+            # Buat gambar baru untuk menyimpan hasil deteksi tepi
+            edge_img = QtGui.QImage(width, height, QtGui.QImage.Format_RGB32)
+
+            for x in range(width):
+                for y in range(height):
+                    r_x, g_x, b_x = 0, 0, 0
+                    r_y, g_y, b_y = 0, 0, 0
+                    r, g, b = 0, 0, 0
+
+                    for i in range(-1, 2):
+                        for j in range(-1, 2):
+                            px = x + i
+                            py = y + j
+
+                            if 0 <= px < width and 0 <= py < height:
+                                pixel_color = QtGui.QColor(img.pixel(px, py))
+                                weight_x = sobel_kernel_x[i + 1][j + 1]
+                                weight_y = sobel_kernel_y[i + 1][j + 1]
+
+                                r_x, g_x, b_x = pixel_color.red(), pixel_color.green(), pixel_color.blue()
+                                r_y, g_y, b_y = pixel_color.red(), pixel_color.green(), pixel_color.blue()
+
+                                r = max(0, min(r + (r_x * weight_x), 255))
+                                g = max(0, min(g + (g_x * weight_x), 255))
+                                b = max(0, min(b + (b_x * weight_x), 255))
+
+                                r = max(0, min(r + (r_y * weight_y), 255))
+                                g = max(0, min(g + (g_y * weight_y), 255))
+                                b = max(0, min(b + (b_y * weight_y), 255))
+
+                    # Hitung magnitude dari gradien tepi
+                    magnitude = int(
+                        (r_x**2 + r_y**2 + g_x**2 + g_y**2 + b_x**2 + b_y**2)**0.5)
+
+                    # Clamp nilai magnitude ke dalam rentang 0-255
+                    # magnitude = max(0, min(magnitude, 255))
+
+                    # Setel nilai piksel baru ke gambar hasil
+                    edge_img.setPixel(x, y, QtGui.qRgb(r, g, b))
+
+            # Setel gambar hasil deteksi tepi ke label atau tempat yang sesuai
+            ouput_pixmap = QPixmap.fromImage(edge_img)
+            self.label_gambar_tujuan.setPixmap(ouput_pixmap)
+            self.label_gambar_tujuan.setScaledContents(True)
+
+    def edge_detection_prewit(self):
+        pixmap = self.label_gambar_asal.pixmap()
+        if pixmap:
+            img = pixmap.toImage()
+            width = img.width()
+            height = img.height()
+
+            # Kernel Prewitt kombinasi (magnitude)
+            prewitt_kernel_x = [
+                [-1, -1, -1],
+                [0, 0, 0],
+                [1, 1, 1]
+            ]
+            prewitt_kernel_y = [
+                [-1, 0, 1],
+                [-1, 0, 1],
+                [-1, 0, 1]
+            ]
+
+            # Buat gambar baru untuk menyimpan hasil deteksi tepi
+            edge_img = QtGui.QImage(width, height, QtGui.QImage.Format_RGB32)
+
+            for x in range(width):
+                for y in range(height):
+                    r, g, b = 0, 0, 0
+
+                    for i in range(3):
+                        for j in range(3):
+                            px = x + i - 1
+                            py = y + j - 1
+
+                            if 0 <= px < width and 0 <= py < height:
+                                pixel_color = QtGui.QColor(img.pixel(px, py))
+
+                                weight_x = prewitt_kernel_x[i][j]
+                                weight_y = prewitt_kernel_y[i][j]
+
+                                r_x, g_x, b_x = pixel_color.red(), pixel_color.green(), pixel_color.blue()
+                                r_y, g_y, b_y = pixel_color.red(), pixel_color.green(), pixel_color.blue()
+
+                                r = max(0, min(r + (r_x * weight_x), 255))
+                                g = max(0, min(g + (g_x * weight_x), 255))
+                                b = max(0, min(b + (b_x * weight_x), 255))
+
+                                r = max(0, min(r + (r_y * weight_y), 255))
+                                g = max(0, min(g + (g_y * weight_y), 255))
+                                b = max(0, min(b + (b_y * weight_y), 255))
+
+                    # Clamp nilai warna ke dalam rentang 0-255
+                    magnitude = int(r ^ 2 + g ^ 2 + b ^ 2)
+
+                    # Clamp nilai magnitude ke dalam rentang 0-255
+                    magnitude1 = max(0, min(magnitude, 255))
+                    # Setel nilai piksel baru ke gambar hasil
+                    edge_img.setPixel(x, y, QtGui.qRgb(
+                        magnitude1, magnitude1, magnitude1))
+
+            # Setel gambar hasil deteksi tepi ke label atau tempat yang sesuai
+            ouput_pixmap = QPixmap.fromImage(edge_img)
+            self.label_gambar_tujuan.setPixmap(ouput_pixmap)
+            self.label_gambar_tujuan.setScaledContents(True)
+
+    def edge_detection_robert(self):
+        pixmap = self.label_gambar_asal.pixmap()
+        if pixmap:
+            img = pixmap.toImage()
+            width = img.width()
+            height = img.height()
+
+            # Kernel Robert untuk Gradien Horizontal (Gx)
+            robert_kernel_x = [
+                [-1, 0],
+                [0, 1]
+            ]
+
+            # Kernel Robert untuk Gradien Vertikal (Gy)
+            robert_kernel_y = [
+                [0, -1],
+                [1, 0]
+            ]
+
+            # Buat gambar baru untuk menyimpan hasil deteksi tepi
+            edge_img = QtGui.QImage(width, height, QtGui.QImage.Format_RGB32)
+
+            for x in range(width):
+                for y in range(height):
+                    r_x, g_x, b_x = 0, 0, 0
+                    r_y, g_y, b_y = 0, 0, 0
+
+                    for i in range(2):
+                        for j in range(2):
+                            px = x + i
+                            py = y + j
+
+                            if 0 <= px < width and 0 <= py < height:
+                                pixel_color = QtGui.QColor(img.pixel(px, py))
+
+                                weight_x = robert_kernel_x[i][j]
+                                weight_y = robert_kernel_y[i][j]
+
+                                r_x += pixel_color.red() * weight_x
+                                g_x += pixel_color.green() * weight_x
+                                b_x += pixel_color.blue() * weight_x
+
+                                r_y += pixel_color.red() * weight_y
+                                g_y += pixel_color.green() * weight_y
+                                b_y += pixel_color.blue() * weight_y
+
+                    # Hitung magnitude dari gradien tepi
+                    magnitude = int(
+                        (r_x**2 + r_y**2 + g_x**2 + g_y**2 + b_x**2 + b_y**2)**0.5)
+
+                    # Clamp nilai magnitude ke dalam rentang 0-255
+                    magnitude = max(0, min(magnitude, 255))
+
+                    # Setel nilai piksel baru ke gambar hasil
+                    edge_img.setPixel(x, y, QtGui.qRgb(
+                        magnitude, magnitude, magnitude))
+
+            # Setel gambar hasil deteksi tepi ke label atau tempat yang sesuai
+            output_pixmap = QPixmap.fromImage(edge_img)
+            self.label_gambar_tujuan.setPixmap(output_pixmap)
+            self.label_gambar_tujuan.setScaledContents(True)
+
+    def identity(self):
+        pixmap = self.label_gambar_asal.pixmap()
+
+        if pixmap:
+            img = pixmap.toImage()
+
+            # Buat salinan gambar asli ke gambar tujuan
+            output_pixmap = QPixmap.fromImage(img)
+
+            self.label_gambar_tujuan.setPixmap(output_pixmap)
+            self.label_gambar_tujuan.setScaledContents(True)
+
+    def gaussian3x3(self):
+        pixmap = self.label_gambar_asal.pixmap()
+        if pixmap:
+            img = pixmap.toImage()
+            width = img.width()
+            height = img.height()
+
+            # Buat kernel Gaussian 3x3
+            kernel = [
+                [1, 2, 1],
+                [2, 4, 2],
+                [1, 2, 1]
+            ]
+
+            # Buat gambar baru untuk menyimpan hasil Gaussian Blur
+            new_img = QtGui.QImage(width, height, QtGui.QImage.Format_RGB32)
+
+            for x in range(width):
+                for y in range(height):
+                    r, g, b = 0, 0, 0
+                    for i in range(-1, 2):
+                        for j in range(-1, 2):
+                            px = x + i
+                            py = y + j
+
+                            if 0 <= px < width and 0 <= py < height:
+                                pixel_color = QtGui.QColor(img.pixel(px, py))
+                                weight = kernel[i + 1][j + 1]
+                                r += pixel_color.red() * weight
+                                g += pixel_color.green() * weight
+                                b += pixel_color.blue() * weight
+
+                    r //= 16  # Normalisasi hasil konvolusi
+                    g //= 16
+                    b //= 16
+
+                    # Tetapkan nilai piksel baru ke gambar hasil
+                    new_img.setPixel(x, y, QtGui.qRgb(r, g, b))
+
+            # Setel gambar hasil ke label atau tempat yang sesuai
+            ouput_pixmap = QPixmap.fromImage(new_img)
+            self.label_gambar_tujuan.setPixmap(ouput_pixmap)
+            self.label_gambar_tujuan.setScaledContents(True)
+
+    def gaussian5x5(self):
+        pixmap = self.label_gambar_asal.pixmap()
+        if pixmap:
+            img = pixmap.toImage()
+            width = img.width()
+            height = img.height()
+
+            # Buat kernel Gaussian 5x5
+            kernel = [
+                [1, 4, 6, 4, 1],
+                [4, 16, 24, 16, 4],
+                [6, 24, 36, 24, 6],
+                [4, 16, 24, 16, 4],
+                [1, 4, 6, 4, 1]
+            ]
+
+            # Buat gambar baru untuk menyimpan hasil Gaussian Blur
+            new_img = QtGui.QImage(width, height, QtGui.QImage.Format_RGB32)
+
+            for x in range(width):
+                for y in range(height):
+                    r, g, b = 0, 0, 0
+                    for i in range(-2, 3):
+                        for j in range(-2, 3):
+                            px = x + i
+                            py = y + j
+
+                            if 0 <= px < width and 0 <= py < height:
+                                pixel_color = QtGui.QColor(img.pixel(px, py))
+                                weight = kernel[i + 2][j + 2]
+                                r += pixel_color.red() * weight
+                                g += pixel_color.green() * weight
+                                b += pixel_color.blue() * weight
+
+                    r //= 256  # Normalisasi hasil konvolusi
+                    g //= 256
+                    b //= 256
+
+                    # Tetapkan nilai piksel baru ke gambar hasil
+                    new_img.setPixel(x, y, QtGui.qRgb(r, g, b))
+
+            # Setel gambar hasil ke label atau tempat yang sesuai
+            ouput_pixmap = QPixmap.fromImage(new_img)
+            self.label_gambar_tujuan.setPixmap(ouput_pixmap)
+            self.label_gambar_tujuan.setScaledContents(True)
+
+    def high_pass_filter(self):
+        pixmap = self.label_gambar_asal.pixmap()
+        if pixmap:
+            img = pixmap.toImage()
+            width = img.width()
+            height = img.height()
+
+            high_pass_kernel = np.array([
+                [0, -1, 0],
+                [-1, 4, -1],
+                [0, -1, 0]
+            ], dtype=np.float32)
+
+        # Buat gambar baru untuk menyimpan hasil filter tinggi
+        high_pass_img = QImage(width, height, QImage.Format_RGB32)
+
+        for x in range(width):
+            for y in range(height):
+                r, g, b = 0, 0, 0
+
+                for i in range(-1, 2):
+                    for j in range(-1, 2):
+                        px = x + i
+                        py = y + j
+
+                        if 0 <= px < width and 0 <= py < height:
+                            pixel_color = QColor(img.pixel(px, py))
+                            r += pixel_color.red() * \
+                                high_pass_kernel[i + 1][j + 1]
+                            g += pixel_color.green() * \
+                                high_pass_kernel[i + 1][j + 1]
+                            b += pixel_color.blue() * \
+                                high_pass_kernel[i + 1][j + 1]
+
+                # Clamp nilai warna ke dalam rentang 0-255
+                r = max(0, min(int(r), 255))
+                g = max(0, min(int(g), 255))
+                b = max(0, min(int(b), 255))
+
+                # Setel nilai piksel baru ke gambar hasil
+                high_pass_img.setPixel(x, y, QColor(r, g, b).rgb())
+
+        # Tampilkan hasil filter tinggi di label atau tempat yang sesuai
+        high_pass_pixmap = QPixmap.fromImage(high_pass_img)
+        self.label_gambar_tujuan.setPixmap(high_pass_pixmap)
+        self.label_gambar_tujuan.setScaledContents(True)
+
+    def low_pass_filter(self):
+        pixmap = self.label_gambar_asal.pixmap()
+        if pixmap:
+            img = pixmap.toImage()
+            width = img.width()
+            height = img.height()
+
+            # Buat kernel Gaussian 3x3
+            kernel = [
+                [1, 1, 1],
+                [1, 1, 1],
+                [1, 1, 1]
+            ]
+
+            # Buat gambar baru untuk menyimpan hasil Gaussian Blur
+            new_img = QtGui.QImage(width, height, QtGui.QImage.Format_RGB32)
+
+            for x in range(width):
+                for y in range(height):
+                    r, g, b = 0, 0, 0
+                    for i in range(-1, 2):
+                        for j in range(-1, 2):
+                            px = x + i
+                            py = y + j
+
+                            if 0 <= px < width and 0 <= py < height:
+                                pixel_color = QtGui.QColor(img.pixel(px, py))
+                                weight = kernel[i + 1][j + 1]
+                                r += pixel_color.red() * weight
+                                g += pixel_color.green() * weight
+                                b += pixel_color.blue() * weight
+
+                    r //= 9  # Normalisasi hasil konvolusi
+                    g //= 9
+                    b //= 9
+
+                    # Tetapkan nilai piksel baru ke gambar hasil
+                    new_img.setPixel(x, y, QtGui.qRgb(r, g, b))
+
+            # Setel gambar hasil ke label atau tempat yang sesuai
+            ouput_pixmap = QPixmap.fromImage(new_img)
+            self.label_gambar_tujuan.setPixmap(ouput_pixmap)
+            self.label_gambar_tujuan.setScaledContents(True)
+
+    def fhe_grayscale(self):
+        alpha = 1
+        pixmap = self.label_gambar_asal.pixmap()
+        image = pixmap.toImage()
+        width = image.width()
+        height = image.height()
+
+        # Inisialisasi histogram untuk gambar grayscale
+        grayscale_histogram = [0] * 256
+
+        # Hitung histogram untuk gambar grayscale
+        for y in range(height):
+            for x in range(width):
+                pixel_color = image.pixelColor(x, y)
+                r, g, b = pixel_color.red(), pixel_color.green(), pixel_color.blue()
+                grayscale_value = int(0.299 * r + 0.587 * g + 0.114 * b)
+                grayscale_histogram[grayscale_value] += 1
+
+        # Hitung cumulative histogram untuk gambar grayscale
+        cumulative_histogram = self.calculate_cumulative_histogram(
+            grayscale_histogram)
+
+        # Terapkan fuzzy histogram equalization pada gambar grayscale
+        for y in range(height):
+            for x in range(width):
+                pixel_color = image.pixelColor(x, y)
+                r, g, b = pixel_color.red(), pixel_color.green(), pixel_color.blue()
+                grayscale_value = int(0.299 * r + 0.587 * g + 0.114 * b)
+                fuzzy_grayscale = alpha * \
+                    cumulative_histogram[grayscale_value] + \
+                    (1 - alpha) * grayscale_value
+                new_color = QColor(
+                    fuzzy_grayscale, fuzzy_grayscale, fuzzy_grayscale)
+                image.setPixel(x, y, new_color.rgb())  # Set warna piksel baru
+
+        pixmap_equalized = QPixmap.fromImage(image)
+        self.label_gambar_tujuan.setPixmap(pixmap_equalized)
+        self.label_gambar_tujuan.setScaledContents(True)
+
+    def fhe_rgb(self):
+        alpha = 1  # Mengatur alpha menjadi 0
+        pixmap = self.label_gambar_asal.pixmap()
+        image = pixmap.toImage()
+        width = image.width()
+        height = image.height()
+
+        # Inisialisasi histogram untuk setiap saluran
+        red_histogram = [0] * 256
+        green_histogram = [0] * 256
+        blue_histogram = [0] * 256
+
+        # Hitung histogram untuk setiap saluran
+        for y in range(height):
+            for x in range(width):
+                pixel_color = image.pixelColor(x, y)
+                red_histogram[pixel_color.red()] += 1
+                green_histogram[pixel_color.green()] += 1
+                blue_histogram[pixel_color.blue()] += 1
+
+        # Hitung cumulative histogram untuk setiap saluran
+        red_cumulative_histogram = self.calculate_cumulative_histogram(
+            red_histogram)
+        green_cumulative_histogram = self.calculate_cumulative_histogram(
+            green_histogram)
+        blue_cumulative_histogram = self.calculate_cumulative_histogram(
+            blue_histogram)
+
+        # Terapkan fuzzy histogram equalization pada setiap saluran
+        for y in range(height):
+            for x in range(width):
+                pixel_color = image.pixelColor(x, y)
+                r = pixel_color.red()
+                g = pixel_color.green()
+                b = pixel_color.blue()
+                fuzzy_r = alpha * red_cumulative_histogram[r] + (1 - alpha) * r
+                fuzzy_g = alpha * \
+                    green_cumulative_histogram[g] + (1 - alpha) * g
+                fuzzy_b = alpha * \
+                    blue_cumulative_histogram[b] + (1 - alpha) * b
+                new_color = QColor(int(fuzzy_r), int(fuzzy_g), int(fuzzy_b))
+                image.setPixelColor(x, y, new_color)
+
+        pixmap_equalized = QPixmap.fromImage(image)
+        self.label_gambar_tujuan.setPixmap(pixmap_equalized)
+        self.label_gambar_tujuan.setScaledContents(True)
+
+    def histogram_equalization(self):
+        pixmap = self.label_gambar_asal.pixmap()
+        image = pixmap.toImage()
+        width = image.width()
+        height = image.height()
+
+        # Inisialisasi histogram untuk setiap saluran
+        red_histogram = [0] * 256
+        green_histogram = [0] * 256
+        blue_histogram = [0] * 256
+
+        # Hitung histogram untuk setiap saluran
+        for y in range(height):
+            for x in range(width):
+                pixel_color = image.pixelColor(x, y)
+                red_histogram[pixel_color.red()] += 1
+                green_histogram[pixel_color.green()] += 1
+                blue_histogram[pixel_color.blue()] += 1
+
+        # Hitung cumulative histogram untuk setiap saluran
+        red_cumulative_histogram = self.calculate_cumulative_histogram(
+            red_histogram)
+        green_cumulative_histogram = self.calculate_cumulative_histogram(
+            green_histogram)
+        blue_cumulative_histogram = self.calculate_cumulative_histogram(
+            blue_histogram)
+
+        # Terapkan histogram equalization pada setiap saluran
+        for y in range(height):
+            for x in range(width):
+                pixel_color = image.pixelColor(x, y)
+                r = red_cumulative_histogram[pixel_color.red()]
+                g = green_cumulative_histogram[pixel_color.green()]
+                b = blue_cumulative_histogram[pixel_color.blue()]
+                new_color = QColor(r, g, b)
+                image.setPixelColor(x, y, new_color)
+
+        pixmap_equalized = QPixmap.fromImage(image)
+        self.label_gambar_tujuan.setPixmap(pixmap_equalized)
+        self.label_gambar_tujuan.setScaledContents(True)
+
+    def calculate_cumulative_histogram(self, histogram):
+        cumulative_histogram = [0] * 256
+        cumulative_sum = 0
+        total_pixels = sum(histogram)
+
+        for i in range(256):
+            cumulative_sum += histogram[i]
+            cumulative_histogram[i] = int(255 * cumulative_sum / total_pixels)
+
+        return cumulative_histogram
+
+    def threshold(self):
+        print('test')
+        threshold_value, ok = QtWidgets.QInputDialog.getInt(
+            None, "threshold", "Masukkan nilai threshold 0-255:")
+        if ok:
+            pixmap = self.label_gambar_asal.pixmap()
+            image = pixmap.toImage()
+            width = image.width()
+            height = image.height()
+
+            for y in range(height):
+                for x in range(width):
+                    pixel_color = image.pixelColor(x, y)
+                    r, g, b = pixel_color.red(), pixel_color.green(), pixel_color.blue()
+                    grayscale_value = int(0.299 * r + 0.587 * g + 0.114 * b)
+                    if grayscale_value > threshold_value:
+                        new_color = QColor(255, 255, 255)  # Putih
+                    else:
+                        new_color = QColor(0, 0, 0)  # Hitam
+                    image.setPixelColor(x, y, new_color)
+
+            pixmap_thresholded = QPixmap.fromImage(image)
+            self.label_gambar_tujuan.setPixmap(pixmap_thresholded)
+            self.label_gambar_tujuan.setScaledContents(True)
+
+    def search_bit(self, my_value, bit):
+        bit_value = 2 ** bit
+        searchThreshold = int(256 / bit_value)
+        searchValue = int(256 / (bit_value-1))
+        threshold = []
+        check_value = []
+        result = None
+        threshold.append(0)
+        check_value.append(0)
+        for j in range(1, bit_value):
+            arr_value = j * searchValue
+            check_value.append(arr_value)
+        for i in range(1, bit_value + 1):
+            value = i * searchThreshold
+            threshold.append(value)
+        for index, t in enumerate(threshold):
+            if not my_value >= t:
+                check_index = index - 1
+                result = check_value[check_index]
+                break
+        return int(result)
+
+    def bit_depth(self, bit):
+        pixmap = self.label_gambar_asal.pixmap()
+        image = pixmap.toImage()
+        width = image.width()
+        height = image.height()
+        self.search_bit(128, bit)
+        for y in range(height):
+            for x in range(width):
+                pixel_color = image.pixelColor(x, y)
+                r, g, b = pixel_color.red(), pixel_color.green(), pixel_color.blue()
+                r = min(max(self.search_bit(r, bit), 0), 255)
+                g = min(max(self.search_bit(g, bit), 0), 255)
+                b = min(max(self.search_bit(b, bit), 0), 255)
+                new_color = QColor(r, g, b)
+                image.setPixelColor(x, y, new_color)
+
+        new_image = QPixmap.fromImage(image)
+        self.label_gambar_tujuan.setPixmap(new_image)
+        self.label_gambar_tujuan.setScaledContents(True)
+
+    def invers(self):
+        pixmap = self.label_gambar_asal.pixmap()
+        image = pixmap.toImage()
+        width = image.width()
+        height = image.height()
+
+        for y in range(height):
+            for x in range(width):
+                pixel_color = image.pixelColor(x, y)
+                r, g, b = pixel_color.red(), pixel_color.green(), pixel_color.blue()
+                r = min(max(255 - r, 0), 255)
+                g = min(max(255 - g, 0), 255)
+                b = min(max(255 - b, 0), 255)
+                new_color = QColor(r, g, b)
+                image.setPixelColor(x, y, new_color)
+
+        pixmap_grayscale = QPixmap.fromImage(image)
+        self.label_gambar_tujuan.setPixmap(pixmap_grayscale)
+        self.label_gambar_tujuan.setScaledContents(True)
 
     def brightnes(self):
         if self.label_gambar_asal.pixmap() is not None:
@@ -24,19 +740,19 @@ class Ui_MainWindow(object):
                 MainWindow, "Peringatan", "Tidak ada gambar yang dibuka.")
 
     def contrast(self):
-        result = self.brightnes_dialog.getValue()
-        print(f"Nilai dari BrightnessDialog: {result}")
-        print('contrast')
+        if self.label_gambar_asal.pixmap() is not None:
+            self.contrast_dialog = ContrastDialog(main_window=self)
+            self.contrast_dialog.exec_()
+        else:
+            QMessageBox.warning(
+                MainWindow, "Peringatan", "Tidak ada gambar yang dibuka.")
 
-    # todo histogram input
     def histogram_input(self):
-        print('test 1')
         self.histogram_input_dialog = HistogramDialog(
             self.directory_input)
         self.histogram_input_dialog.show()
 
     def histogram_output(self):
-        print('test 2')
         if hasattr(self, 'directory_input'):
             output_file = "output.jpg"  # Nama file output yang akan digunakan
             pixmap = self.label_gambar_tujuan.pixmap()
@@ -63,8 +779,6 @@ class Ui_MainWindow(object):
         self.histogram_input()
         self.histogram_output()
 
-    # todo translasi
-
     def translasi(self):
         original_pixmap = self.label_gambar_asal.pixmap()
         if original_pixmap:
@@ -80,25 +794,20 @@ class Ui_MainWindow(object):
                 if ok_ty:
                     width = original_pixmap.width()
                     height = original_pixmap.height()
-
                     # Membuat QPixmap baru dengan ukuran yang sama
                     translated_pixmap = QtGui.QPixmap(width, height)
                     # Mengisi dengan latar belakang transparan
                     translated_pixmap.fill(QtGui.QColor(0, 0, 0, 0))
-
                     painter = QtGui.QPainter(translated_pixmap)
-
                     for x in range(width):
                         for y in range(height):
                             # Menggeser koordinat x dan y sesuai dengan nilai tx dan ty
                             x_translated = x + tx
                             y_translated = y + ty
-
                             # Memeriksa apakah koordinat baru berada dalam batas gambar
                             if 0 <= x_translated < width and 0 <= y_translated < height:
                                 # Mendapatkan warna pixel dari gambar asli
                                 pixel_color = original_pixmap.toImage().pixelColor(x, y)
-
                                 # Menggambar ulang pixel ke gambar yang sudah digeser
                                 painter.setPen(pixel_color)
                                 painter.drawPoint(x_translated, y_translated)
@@ -421,12 +1130,6 @@ class Ui_MainWindow(object):
                 QMessageBox.warning(
                     MainWindow, "Peringatan", "Tidak ada gambar yang ditampilkan untuk disimpan.")
 
-    def onSliderChange(self, value):
-        # Metode yang akan dipanggil saat nilai slider berubah
-        # print(f"Nilai Slider: {value}")
-        self.sliderLabel.setText(str(value))
-        # Anda dapat menambahkan kode lain di sini sesuai kebutuhan
-
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1000, 650)
@@ -436,6 +1139,7 @@ class Ui_MainWindow(object):
         self.histogram_input_dialog = None  # Inisialisasi dialog
         self.histogram_output_dialog = None  # Inisialisasi dialog
         self.brightnes_dialog = None  # Inisialisasi dialog
+        self.contrast_dialog = None  # Inisialisasi dialog
         self.centralwidget.setObjectName("centralwidget")
         self.verticalLayoutWidget = QtWidgets.QWidget(self.centralwidget)
         self.verticalLayoutWidget.setGeometry(QtCore.QRect(20, 60, 460, 460))
@@ -517,6 +1221,8 @@ class Ui_MainWindow(object):
         self.actionKeluar.setObjectName("actionKeluar")
         self.actionInvers = QtWidgets.QAction(MainWindow)
         self.actionInvers.setObjectName("actionInvers")
+        self.actionthreshold = QtWidgets.QAction(MainWindow)
+        self.actionthreshold.setObjectName("actionthreshold")
         self.actionLog_Brightness = QtWidgets.QAction(MainWindow)
         self.actionLog_Brightness.setObjectName("actionLog_Brightness")
         self.actionGamma_Correction = QtWidgets.QAction(MainWindow)
@@ -532,8 +1238,8 @@ class Ui_MainWindow(object):
         self.actionSharpen.setObjectName("actionSharpen")
         self.actionUnsharp_Masking = QtWidgets.QAction(MainWindow)
         self.actionUnsharp_Masking.setObjectName("actionUnsharp_Masking")
-        self.actionAverage_Filter = QtWidgets.QAction(MainWindow)
-        self.actionAverage_Filter.setObjectName("actionAverage_Filter")
+        self.actionIdentity = QtWidgets.QAction(MainWindow)
+        self.actionIdentity.setObjectName("actionIdentity")
         self.actionLow_Pass_Filter = QtWidgets.QAction(MainWindow)
         self.actionLow_Pass_Filter.setObjectName("actionLow_Pass_Filter")
         self.actionHigh_Pass_Filter = QtWidgets.QAction(MainWindow)
@@ -586,12 +1292,15 @@ class Ui_MainWindow(object):
         self.actionOutput.setObjectName("actionOutput")
         self.actionInput_Output = QtWidgets.QAction(MainWindow)
         self.actionInput_Output.setObjectName("actionInput_Output")
-        self.actionEdge_Detection_1 = QtWidgets.QAction(MainWindow)
-        self.actionEdge_Detection_1.setObjectName("actionEdge_Detection_1")
-        self.actionEdge_Detection2 = QtWidgets.QAction(MainWindow)
-        self.actionEdge_Detection2.setObjectName("actionEdge_Detection2")
-        self.actionEdge_Detection_3 = QtWidgets.QAction(MainWindow)
-        self.actionEdge_Detection_3.setObjectName("actionEdge_Detection_3")
+        self.actionEdge_Detection_Robert = QtWidgets.QAction(MainWindow)
+        self.actionEdge_Detection_Robert.setObjectName(
+            "actionEdge_Detection_Robert")
+        self.actionEdge_Detection_Sobel = QtWidgets.QAction(MainWindow)
+        self.actionEdge_Detection_Sobel.setObjectName(
+            "actionEdge_Detection_Sobel")
+        self.actionEdge_Detection_Prewit = QtWidgets.QAction(MainWindow)
+        self.actionEdge_Detection_Prewit.setObjectName(
+            "actionEdge_Detection_Prewit")
         self.actionGaussian_Blur_3x3 = QtWidgets.QAction(MainWindow)
         self.actionGaussian_Blur_3x3.setObjectName("actionGaussian_Blur_3x3")
         self.actionGaussian_Blur_5_5 = QtWidgets.QAction(MainWindow)
@@ -652,22 +1361,23 @@ class Ui_MainWindow(object):
 
         # self.menuColor.addAction(self.menuBrightness.menuAction())
         self.menuColor.addAction(self.actionInvers)
+        self.menuColor.addAction(self.actionthreshold)
         self.menuColor.addAction(self.actionLog_Brightness)
         self.menuColor.addAction(self.menuBit_Depth.menuAction())
         self.menuColor.addAction(self.actionGamma_Correction)
         self.menuImage_Processing.addAction(self.actionHistogram_Equalization)
         self.menuImage_Processing.addAction(self.actionFuzzy_HE_RGB)
         self.menuImage_Processing.addAction(self.actionFuzzy_Grayscale)
-        self.menuEdge_Detection.addAction(self.actionEdge_Detection_1)
-        self.menuEdge_Detection.addAction(self.actionEdge_Detection2)
-        self.menuEdge_Detection.addAction(self.actionEdge_Detection_3)
+        self.menuEdge_Detection.addAction(self.actionEdge_Detection_Robert)
+        self.menuEdge_Detection.addAction(self.actionEdge_Detection_Sobel)
+        self.menuEdge_Detection.addAction(self.actionEdge_Detection_Prewit)
         self.menuGaussian_Blur.addAction(self.actionGaussian_Blur_3x3)
         self.menuGaussian_Blur.addAction(self.actionGaussian_Blur_5_5)
         self.menuIdentity.addAction(self.menuEdge_Detection.menuAction())
         self.menuIdentity.addAction(self.actionSharpen)
         self.menuIdentity.addAction(self.menuGaussian_Blur.menuAction())
         self.menuIdentity.addAction(self.actionUnsharp_Masking)
-        self.menuIdentity.addAction(self.actionAverage_Filter)
+        self.menuIdentity.addAction(self.actionIdentity)
         self.menuIdentity.addAction(self.actionLow_Pass_Filter)
         self.menuIdentity.addAction(self.actionHigh_Pass_Filter)
         self.menuIdentity.addAction(self.actionBandstop_Filter)
@@ -721,25 +1431,6 @@ class Ui_MainWindow(object):
         self.menubar.addAction(self.menuMorfologi.menuAction())
         self.menubar.addAction(self.menuGeometri.menuAction())
 
-        # self.verticalLayoutWidget3 = QtWidgets.QWidget(MainWindow)
-        # self.verticalLayoutWidget3.setGeometry(QtCore.QRect(340, 580, 300, 60))
-        # self.verticalLayoutWidget3.setObjectName("verticalLayoutWidget3")
-        # self.verticalLayout3 = QtWidgets.QVBoxLayout(
-        #     self.verticalLayoutWidget3)
-        # self.verticalLayout3.setContentsMargins(0, 0, 0, 0)
-        # self.verticalLayout3.setObjectName("verticalLayout3")
-        # self.slider = QtWidgets.QSlider(self.verticalLayoutWidget3)
-        # self.slider.setOrientation(Qt.Horizontal)
-        # self.slider.setMinimum(0)  # Atur nilai terkecil menjadi 0
-        # self.slider.setMaximum(255)  # Atur nilai terbesar menjadi 100
-        # self.slider.setGeometry(QtCore.QRect(0, 0, 80, 30))
-        # self.verticalLayout3.addWidget(self.slider)
-        # self.sliderLabel = QtWidgets.QLabel(self.verticalLayoutWidget3)
-        # self.sliderLabel.setAlignment(Qt.AlignCenter)
-        # self.sliderLabel.setText("0")
-        # self.verticalLayout3.addWidget(self.sliderLabel)
-        # self.slider.valueChanged.connect(self.onSliderChange)
-
         # todo start tambahan saya
         self.actionBukaFile.triggered.connect(self.buka_file)
         self.simpanSebagai.triggered.connect(self.simpan_sebagai)
@@ -760,7 +1451,40 @@ class Ui_MainWindow(object):
         self.actionInput_Output.triggered.connect(self.histogram_input_output)
         self.actionBrightness.triggered.connect(self.brightnes)
         self.actionContrast.triggered.connect(self.contrast)
+        self.actionInvers.triggered.connect(self.invers)
+        self.actionthreshold.triggered.connect(self.threshold)
+        self.actionFuzzy_HE_RGB.triggered.connect(self.fhe_rgb)
+        self.actionFuzzy_Grayscale.triggered.connect(self.fhe_grayscale)
+        self.actionLow_Pass_Filter.triggered.connect(self.low_pass_filter)
+        self.actionHigh_Pass_Filter.triggered.connect(self.high_pass_filter)
+        self.actionGaussian_Blur_3x3.triggered.connect(self.gaussian3x3)
+        self.actionGaussian_Blur_5_5.triggered.connect(self.gaussian5x5)
+        self.actionIdentity.triggered.connect(self.identity)
+        self.actionSharpen.triggered.connect(self.sharpen)
+        self.actionUnsharp_Masking.triggered.connect(self.unsharp_masking)
 
+        self.actionEdge_Detection_Robert.triggered.connect(
+            self.edge_detection_robert)
+        self.actionEdge_Detection_Prewit.triggered.connect(
+            self.edge_detection_prewit)
+        self.actionEdge_Detection_Sobel.triggered.connect(
+            self.edge_detection_sobel)
+        self.actionHistogram_Equalization.triggered.connect(
+            self.histogram_equalization)
+        self.action1_Bit.triggered.connect(
+            partial(self.bit_depth, 1))
+        self.action2_Bit.triggered.connect(
+            partial(self.bit_depth, 2))
+        self.action3_Bit.triggered.connect(
+            partial(self.bit_depth, 3))
+        self.action4_Bit.triggered.connect(
+            partial(self.bit_depth, 4))
+        self.action5_Bit.triggered.connect(
+            partial(self.bit_depth, 5))
+        self.action6_Bit.triggered.connect(
+            partial(self.bit_depth, 6))
+        self.action7_Bit.triggered.connect(
+            partial(self.bit_depth, 7))
         # todo end tambahan saya
 
         self.retranslateUi(MainWindow)
@@ -786,7 +1510,7 @@ class Ui_MainWindow(object):
             _translate("MainWindow", "Image Processing"))
         self.menuAritmetical_Operation.setTitle(
             _translate("MainWindow", "Aritmetical Operasion"))
-        self.menuIdentity.setTitle(_translate("MainWindow", "Filter"))
+        self.menuIdentity.setTitle(_translate("MainWindow", "Konvolusi"))
         self.menuEdge_Detection.setTitle(
             _translate("MainWindow", "Edge Detection"))
         self.menuGaussian_Blur.setTitle(
@@ -804,6 +1528,7 @@ class Ui_MainWindow(object):
         self.actionContrast.setText(
             _translate("MainWindow", "Contrast"))
         self.actionInvers.setText(_translate("MainWindow", "Invers"))
+        self.actionthreshold.setText(_translate("MainWindow", "Threshold"))
         self.actionLog_Brightness.setText(
             _translate("MainWindow", "Log Brightness"))
         self.actionGamma_Correction.setText(
@@ -817,8 +1542,8 @@ class Ui_MainWindow(object):
         self.actionSharpen.setText(_translate("MainWindow", "Sharpen"))
         self.actionUnsharp_Masking.setText(
             _translate("MainWindow", "Unsharp Masking"))
-        self.actionAverage_Filter.setText(
-            _translate("MainWindow", "Average Filter"))
+        self.actionIdentity.setText(
+            _translate("MainWindow", "Identity"))
         self.actionLow_Pass_Filter.setText(
             _translate("MainWindow", "Low Pass Filter"))
         self.actionHigh_Pass_Filter.setText(
@@ -858,12 +1583,12 @@ class Ui_MainWindow(object):
         self.actionOutput.setText(_translate("MainWindow", "Output"))
         self.actionInput_Output.setText(
             _translate("MainWindow", "Input Output"))
-        self.actionEdge_Detection_1.setText(
-            _translate("MainWindow", "Edge Detection 1"))
-        self.actionEdge_Detection2.setText(
-            _translate("MainWindow", "Edge Detection2"))
-        self.actionEdge_Detection_3.setText(
-            _translate("MainWindow", "Edge Detection 3"))
+        self.actionEdge_Detection_Robert.setText(
+            _translate("MainWindow", "Edge Detection Robert"))
+        self.actionEdge_Detection_Sobel.setText(
+            _translate("MainWindow", "Edge Detection Sobel"))
+        self.actionEdge_Detection_Prewit.setText(
+            _translate("MainWindow", "Edge Detection Prewit"))
         self.actionGaussian_Blur_3x3.setText(
             _translate("MainWindow", "Gaussian Blur 3x3"))
         self.actionGaussian_Blur_5_5.setText(
