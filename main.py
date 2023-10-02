@@ -5,14 +5,56 @@ from PyQt5.QtGui import QPixmap, QImage, QColor, qRgb
 from PyQt5.QtWidgets import QFileDialog, QMessageBox, QDialog, QInputDialog, QSlider, QVBoxLayout, QLabel
 from aritmatika import Ui_Dialog
 # import matplotlib.pyplot as plt
+import cv2
 from histogram_rgb import HistogramDialog
 from brightness import BrightnessDialog
 from contrast import ContrastDialog
 from functools import partial
 from scipy.ndimage import convolve
+from rembg import remove
 
 
 class Ui_MainWindow(object):
+
+    def segmentasi_roi(self):
+        self.image = cv2.imread(self.directory_input)
+        if self.image is not None:
+            self.selected_roi = cv2.selectROI('Select Area', self.image)
+            if all(self.selected_roi):
+                roi = self.image[int(self.selected_roi[1]):int(self.selected_roi[1] + self.selected_roi[3]),
+                                 int(self.selected_roi[0]):int(self.selected_roi[0] + self.selected_roi[2])]
+
+                roi_rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
+                cv2.imwrite('input.png', roi_rgb, [
+                            cv2.IMWRITE_PNG_COMPRESSION, 0])
+                self.directory_input = 'input.png'
+                height, width, channel = roi_rgb.shape
+
+                bytes_per_line = 3 * width
+
+                q_image = QImage(roi_rgb.data, width, height,
+                                 bytes_per_line, QImage.Format_RGB888)
+
+                pixmap = QPixmap.fromImage(q_image)
+                pixmap.toImage().save('input.png', 'PNG')
+
+                self.label_gambar_asal.setPixmap(pixmap)
+                self.label_gambar_asal.setScaledContents(True)
+                self.label_gambar_tujuan.setPixmap(pixmap)
+                self.label_gambar_tujuan.setScaledContents(True)
+
+    def segmentasi_removebg(self):
+        # self.image = cv2.imread(self.directory_input)
+        self.image = self.directory_input
+        if self.image:
+            output_path = 'output.png'  # Ubah sesuai kebutuhan Anda
+            with open(self.image, "rb") as input_file:
+                with open(output_path, "wb") as output_file:
+                    output_file.write(remove(input_file.read()))
+            q_image = QImage(output_path)
+            self.label_gambar_tujuan.setPixmap(QPixmap.fromImage(q_image))
+            self.label_gambar_tujuan.setAlignment(
+                QtCore.Qt.AlignCenter)
 
     def unsharp_masking(self):
         pixmap = self.label_gambar_asal.pixmap()
@@ -749,12 +791,12 @@ class Ui_MainWindow(object):
 
     def histogram_input(self):
         self.histogram_input_dialog = HistogramDialog(
-            self.directory_input)
+            self.directory_input, 'Histogram Input')
         self.histogram_input_dialog.show()
 
     def histogram_output(self):
         if hasattr(self, 'directory_input'):
-            output_file = "output.jpg"  # Nama file output yang akan digunakan
+            output_file = "output.png"  # Nama file output yang akan digunakan
             pixmap = self.label_gambar_tujuan.pixmap()
 
             if pixmap:
@@ -762,8 +804,9 @@ class Ui_MainWindow(object):
                 image = pixmap.toImage()
 
                 # Simpan QImage sebagai file jpg
-                if image.save(output_file, "jpg"):
-                    self.histogram_output_dialog = HistogramDialog(output_file)
+                if image.save(output_file, "png"):
+                    self.histogram_output_dialog = HistogramDialog(
+                        output_file, 'Histogram Output')
                     self.histogram_output_dialog.show()
                 else:
                     QtWidgets.QMessageBox.critical(
@@ -1134,8 +1177,10 @@ class Ui_MainWindow(object):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1000, 650)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.directory_input = "/path/to/your/default/directory"
-        self.directory_output = "/path/to/your/default/directory"
+        self.directory_input = None
+        self.directory_output = None
+        self.selected_roi = None
+        self.image = None
         self.histogram_input_dialog = None  # Inisialisasi dialog
         self.histogram_output_dialog = None  # Inisialisasi dialog
         self.brightnes_dialog = None  # Inisialisasi dialog
@@ -1413,12 +1458,22 @@ class Ui_MainWindow(object):
         self.actionTranslasi.setObjectName("actionTranslasi")
         self.actionRotasi = QtWidgets.QAction(MainWindow)
         self.actionRotasi.setObjectName("actionRotasi")
-
         self.menuGeometri.addAction(self.actionScalingUniform)
         self.menuGeometri.addAction(self.actionScalingNonUniform)
         self.menuGeometri.addAction(self.actionCropping)
         self.menuGeometri.addAction(self.actionTranslasi)
         self.menuGeometri.addAction(self.actionRotasi)
+
+        # ? segemntasi citra
+        self.menuSegmentasiCitra = QtWidgets.QMenu(self.menubar)
+        self.menuSegmentasiCitra.setObjectName("menuSegmentasiCitra")
+        self.actionRoi = QtWidgets.QAction('MainWindow')
+        self.actionRoi.setObjectName("actionRoi")
+        self.actionRemovebg = QtWidgets.QAction('MainWindow')
+        self.actionRemovebg.setObjectName("actionRemovebg")
+
+        self.menuSegmentasiCitra.addAction(self.actionRoi)
+        self.menuSegmentasiCitra.addAction(self.actionRemovebg)
 
         self.menubar.addAction(self.menuFile.menuAction())
         self.menubar.addAction(self.menuView.menuAction())
@@ -1430,6 +1485,7 @@ class Ui_MainWindow(object):
         self.menubar.addAction(self.menuEdge_Detection_2.menuAction())
         self.menubar.addAction(self.menuMorfologi.menuAction())
         self.menubar.addAction(self.menuGeometri.menuAction())
+        self.menubar.addAction(self.menuSegmentasiCitra.menuAction())
 
         # todo start tambahan saya
         self.actionBukaFile.triggered.connect(self.buka_file)
@@ -1462,6 +1518,8 @@ class Ui_MainWindow(object):
         self.actionIdentity.triggered.connect(self.identity)
         self.actionSharpen.triggered.connect(self.sharpen)
         self.actionUnsharp_Masking.triggered.connect(self.unsharp_masking)
+        self.actionRoi.triggered.connect(self.segmentasi_roi)
+        self.actionRemovebg.triggered.connect(self.segmentasi_removebg)
 
         self.actionEdge_Detection_Robert.triggered.connect(
             self.edge_detection_robert)
@@ -1493,6 +1551,7 @@ class Ui_MainWindow(object):
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
+
         self.menuFile.setTitle(_translate("MainWindow", "File"))
         self.menuView.setTitle(_translate("MainWindow", "View"))
         self.menuHistogram.setTitle(_translate("MainWindow", "Histogram"))
@@ -1519,6 +1578,12 @@ class Ui_MainWindow(object):
             _translate("MainWindow", "Edge Detection"))
         self.menuMorfologi.setTitle(_translate("MainWindow", "Morfologi"))
         self.menuGeometri.setTitle(_translate("MainWindow", "Geometri"))
+        self.menuSegmentasiCitra.setTitle(
+            _translate("MainWindow", "Segmentasi Citra"))
+        self.actionRoi.setText(
+            _translate("MainWindow", "ROI"))
+        self.actionRemovebg.setText(
+            _translate("MainWindow", "Remove background"))
         self.menuErosion.setTitle(_translate("MainWindow", "Erosion"))
         self.menuDilation.setTitle(_translate("MainWindow", "Dilation"))
         self.menuOpening.setTitle(_translate("MainWindow", "Opening"))

@@ -8,7 +8,7 @@ from matplotlib.figure import Figure
 
 
 class HistogramDialog(QDialog):
-    def __init__(self, image_path):
+    def __init__(self, image_path, name):
         super().__init__()
 
         self.imageObj = cv2.imread(image_path)
@@ -19,11 +19,10 @@ class HistogramDialog(QDialog):
         self.green_color = cv2.calcHist(
             [self.imageObj], [2], None, [256], [0, 256])
 
-        self.initUI()
+        self.initUI(name)
 
-    def initUI(self):
+    def initUI(self, name):
         layout = QVBoxLayout()
-
         label_blue = QLabel("Histogram of Blue")
         layout.addWidget(label_blue)
         self.blue_plot = self.create_histogram_plot(self.blue_color, 'blue')
@@ -44,7 +43,7 @@ class HistogramDialog(QDialog):
         layout.addWidget(button_close)
 
         self.setLayout(layout)
-        self.setWindowTitle("Histogram Viewer")
+        self.setWindowTitle(name)
 
     def create_histogram_plot(self, histogram, color):
         fig = Figure()
