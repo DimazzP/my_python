@@ -121,76 +121,216 @@ class Ui_MainWindow(object):
         self.label_gambar_tujuan.setScaledContents(True)
 
     def morfologi_closing_square_9x9(self):
-        # Get the input image
-        img = self.label_gambar_asal.pixmap().toImage()
+        # Mendapatkan pixmap dari QLabel
+        pixmap = self.label_gambar_asal.pixmap()
 
-        width, height = img.width(), img.height()
+        if pixmap:
+            # Mengonversi pixmap ke objek QImage
+            img = pixmap.toImage()
+            img_height = img.height()
+            img_width = img.width()
 
-        # Create an output image with the same size
-        output_image = QImage(width, height, QImage.Format_RGB32)
+            # Membuat QImage baru untuk menyimpan hasil closing
+            dilated_qimage = QImage(img_width, img_height, QImage.Format_RGB32)
 
-        # Define the structuring element size (9x9)
-        structuring_element_size = 9
+            # Membuat array strel square 9x9 untuk operasi dilasi
+            strel_square9_dilation = [
+                [-4, -4], [-4, -3], [-4, -2], [-4, -1], [-4,
+                                                         0], [-4, 1], [-4, 2], [-4, 3], [-4, 4],
+                [-3, -4], [-3, -3], [-3, -2], [-3, -1], [-3,
+                                                         0], [-3, 1], [-3, 2], [-3, 3], [-3, 4],
+                [-2, -4], [-2, -3], [-2, -2], [-2, -1], [-2,
+                                                         0], [-2, 1], [-2, 2], [-2, 3], [-2, 4],
+                [-1, -4], [-1, -3], [-1, -2], [-1, -1], [-1,
+                                                         0], [-1, 1], [-1, 2], [-1, 3], [-1, 4],
+                [0, -4], [0, -3], [0, -2], [0, -1], [0,
+                                                     0], [0, 1], [0, 2], [0, 3], [0, 4],
+                [1, -4], [1, -3], [1, -2], [1, -1], [1,
+                                                     0], [1, 1], [1, 2], [1, 3], [1, 4],
+                [2, -4], [2, -3], [2, -2], [2, -1], [2,
+                                                     0], [2, 1], [2, 2], [2, 3], [2, 4],
+                [3, -4], [3, -3], [3, -2], [3, -1], [3,
+                                                     0], [3, 1], [3, 2], [3, 3], [3, 4],
+                [4, -4], [4, -3], [4, -2], [4, -1], [4,
+                                                     0], [4, 1], [4, 2], [4, 3], [4, 4]
+            ]
 
-        # Calculate the padding size
-        padding_size = structuring_element_size // 2
+            # Membuat array strel square 9x9 untuk operasi erosi
+            strel_square9_erosion = [
+                [-4, -4], [-4, -3], [-4, -2], [-4, -1], [-4,
+                                                         0], [-4, 1], [-4, 2], [-4, 3], [-4, 4],
+                [-3, -4], [-3, -3], [-3, -2], [-3, -1], [-3,
+                                                         0], [-3, 1], [-3, 2], [-3, 3], [-3, 4],
+                [-2, -4], [-2, -3], [-2, -2], [-2, -1], [-2,
+                                                         0], [-2, 1], [-2, 2], [-2, 3], [-2, 4],
+                [-1, -4], [-1, -3], [-1, -2], [-1, -1], [-1,
+                                                         0], [-1, 1], [-1, 2], [-1, 3], [-1, 4],
+                [0, -4], [0, -3], [0, -2], [0, -1], [0,
+                                                     0], [0, 1], [0, 2], [0, 3], [0, 4],
+                [1, -4], [1, -3], [1, -2], [1, -1], [1,
+                                                     0], [1, 1], [1, 2], [1, 3], [1, 4],
+                [2, -4], [2, -3], [2, -2], [2, -1], [2,
+                                                     0], [2, 1], [2, 2], [2, 3], [2, 4],
+                [3, -4], [3, -3], [3, -2], [3, -1], [3,
+                                                     0], [3, 1], [3, 2], [3, 3], [3, 4],
+                [4, -4], [4, -3], [4, -2], [4, -1], [4,
+                                                     0], [4, 1], [4, 2], [4, 3], [4, 4]
+            ]
 
-        for y in range(padding_size, height - padding_size):
-            for x in range(padding_size, width - padding_size):
-                # Get the pixel values of the 9x9 neighborhood
-                pixels = []
-                for i in range(-padding_size, padding_size + 1):
-                    for j in range(-padding_size, padding_size + 1):
-                        pixel = img.pixel(x + i, y + j)
-                        pixels.append(QColor(pixel).red())
+            # Buat gambar sementara untuk hasil dilasi
+            dilated_qimage = QImage(img_width, img_height, QImage.Format_RGB32)
 
-                # Check if all pixels in the neighborhood are black (0)
-                if all(pixel == 0 for pixel in pixels):
-                    # If all pixels are black, set the central pixel to black
-                    output_image.setPixel(x, y, qRgb(0, 0, 0))
-                else:
-                    # Otherwise, set the central pixel to white
-                    output_image.setPixel(x, y, qRgb(255, 255, 255))
+            for x in range(img_width):
+                for y in range(img_height):
+                    # Inisialisasi nilai piksel dilasi ke hitam (0, 0, 0)
+                    dilated_qimage.setPixel(x, y, QtGui.qRgb(0, 0, 0))
 
-        output_pixmap = QPixmap.fromImage(output_image)
-        self.label_gambar_tujuan.setPixmap(output_pixmap)
-        self.label_gambar_tujuan.setScaledContents(True)
+                    # Cek piksel-piksel sekitarnya sesuai dengan array strel square 9x9 untuk dilasi
+                    for i, j in strel_square9_dilation:
+                        px = x + i
+                        py = y + j
+
+                        if 0 <= px < img_width and 0 <= py < img_height:
+                            pixel_color = QtGui.QColor(img.pixel(px, py))
+                            if pixel_color.red() == 255:
+                                # Jika ada piksel putih dalam array strel dilasi, set piksel dilasi ke putih (255, 255, 255)
+                                dilated_qimage.setPixel(
+                                    x, y, QtGui.qRgb(255, 255, 255))
+
+            # Buat gambar sementara untuk hasil erosi
+            eroded_qimage = QImage(img_width, img_height, QImage.Format_RGB32)
+
+            for x in range(img_width):
+                for y in range(img_height):
+                    # Inisialisasi nilai piksel erosi ke putih (255, 255, 255)
+                    eroded_qimage.setPixel(x, y, QtGui.qRgb(255, 255, 255))
+
+                    # Cek piksel-piksel sekitarnya sesuai dengan array strel square 9x9 untuk erosi
+                    for i, j in strel_square9_erosion:
+                        px = x + i
+                        py = y + j
+
+                        if 0 <= px < img_width and 0 <= py < img_height:
+                            pixel_color = QtGui.QColor(
+                                dilated_qimage.pixel(px, py))
+                            if pixel_color.red() == 0:
+                                # Jika ada piksel hitam dalam array strel erosi, set piksel erosi ke hitam (0, 0, 0)
+                                eroded_qimage.setPixel(
+                                    x, y, QtGui.qRgb(0, 0, 0))
+
+            # Konversi QImage ke QPixmap untuk menampilkannya di QLabel
+            closed_pixmap = QPixmap.fromImage(eroded_qimage)
+
+            # Menampilkan hasil closing di QLabel
+            self.label_gambar_tujuan.setPixmap(closed_pixmap)
+            self.label_gambar_tujuan.setScaledContents(True)
+            self.displayed_pixmap = closed_pixmap
 
     def morfologi_opening_square_9x9(self):
-        # Get the input image
-        img = self.label_gambar_asal.pixmap().toImage()
+        # Mendapatkan pixmap dari QLabel
+        pixmap = self.label_gambar_asal.pixmap()
 
-        width, height = img.width(), img.height()
+        if pixmap:
+            # Mengonversi pixmap ke objek QImage
+            img = pixmap.toImage()
+            img_height = img.height()
+            img_width = img.width()
 
-        # Create an output image with the same size
-        output_image = QImage(width, height, QImage.Format_RGB32)
+            # Membuat QImage baru untuk menyimpan hasil opening
+            dilated_qimage = QImage(img_width, img_height, QImage.Format_RGB32)
 
-        # Define the structuring element size (9x9)
-        structuring_element_size = 9
+            # Membuat array strel square 9x9 untuk operasi erosi
+            strel_square9_erosion = [
+                [-4, -4], [-4, -3], [-4, -2], [-4, -1], [-4,
+                                                         0], [-4, 1], [-4, 2], [-4, 3], [-4, 4],
+                [-3, -4], [-3, -3], [-3, -2], [-3, -1], [-3,
+                                                         0], [-3, 1], [-3, 2], [-3, 3], [-3, 4],
+                [-2, -4], [-2, -3], [-2, -2], [-2, -1], [-2,
+                                                         0], [-2, 1], [-2, 2], [-2, 3], [-2, 4],
+                [-1, -4], [-1, -3], [-1, -2], [-1, -1], [-1,
+                                                         0], [-1, 1], [-1, 2], [-1, 3], [-1, 4],
+                [0, -4], [0, -3], [0, -2], [0, -1], [0,
+                                                     0], [0, 1], [0, 2], [0, 3], [0, 4],
+                [1, -4], [1, -3], [1, -2], [1, -1], [1,
+                                                     0], [1, 1], [1, 2], [1, 3], [1, 4],
+                [2, -4], [2, -3], [2, -2], [2, -1], [2,
+                                                     0], [2, 1], [2, 2], [2, 3], [2, 4],
+                [3, -4], [3, -3], [3, -2], [3, -1], [3,
+                                                     0], [3, 1], [3, 2], [3, 3], [3, 4],
+                [4, -4], [4, -3], [4, -2], [4, -1], [4,
+                                                     0], [4, 1], [4, 2], [4, 3], [4, 4]
+            ]
 
-        # Calculate the padding size
-        padding_size = structuring_element_size // 2
+            # Membuat array strel square 9x9 untuk operasi dilasi
+            strel_square9_dilation = [
+                [-4, -4], [-4, -3], [-4, -2], [-4, -1], [-4,
+                                                         0], [-4, 1], [-4, 2], [-4, 3], [-4, 4],
+                [-3, -4], [-3, -3], [-3, -2], [-3, -1], [-3,
+                                                         0], [-3, 1], [-3, 2], [-3, 3], [-3, 4],
+                [-2, -4], [-2, -3], [-2, -2], [-2, -1], [-2,
+                                                         0], [-2, 1], [-2, 2], [-2, 3], [-2, 4],
+                [-1, -4], [-1, -3], [-1, -2], [-1, -1], [-1,
+                                                         0], [-1, 1], [-1, 2], [-1, 3], [-1, 4],
+                [0, -4], [0, -3], [0, -2], [0, -1], [0,
+                                                     0], [0, 1], [0, 2], [0, 3], [0, 4],
+                [1, -4], [1, -3], [1, -2], [1, -1], [1,
+                                                     0], [1, 1], [1, 2], [1, 3], [1, 4],
+                [2, -4], [2, -3], [2, -2], [2, -1], [2,
+                                                     0], [2, 1], [2, 2], [2, 3], [2, 4],
+                [3, -4], [3, -3], [3, -2], [3, -1], [3,
+                                                     0], [3, 1], [3, 2], [3, 3], [3, 4],
+                [4, -4], [4, -3], [4, -2], [4, -1], [4,
+                                                     0], [4, 1], [4, 2], [4, 3], [4, 4]
+            ]
 
-        for y in range(padding_size, height - padding_size):
-            for x in range(padding_size, width - padding_size):
-                # Get the pixel values of the 9x9 neighborhood
-                pixels = []
-                for i in range(-padding_size, padding_size + 1):
-                    for j in range(-padding_size, padding_size + 1):
-                        pixel = img.pixel(x + i, y + j)
-                        pixels.append(QColor(pixel).red())
+            # Buat gambar sementara untuk hasil erosi
+            eroded_qimage = QImage(img_width, img_height, QImage.Format_RGB32)
 
-                # Check if all pixels in the neighborhood are white (255)
-                if all(pixel == 255 for pixel in pixels):
-                    # If all pixels are white, set the central pixel to white
-                    output_image.setPixel(x, y, qRgb(255, 255, 255))
-                else:
-                    # Otherwise, set the central pixel to black
-                    output_image.setPixel(x, y, qRgb(0, 0, 0))
+            for x in range(img_width):
+                for y in range(img_height):
+                    # Inisialisasi nilai piksel erosi ke putih (255, 255, 255)
+                    eroded_qimage.setPixel(x, y, QtGui.qRgb(255, 255, 255))
 
-        output_pixmap = QPixmap.fromImage(output_image)
-        self.label_gambar_tujuan.setPixmap(output_pixmap)
-        self.label_gambar_tujuan.setScaledContents(True)
+                    # Cek piksel-piksel sekitarnya sesuai dengan array strel square 9x9 untuk erosi
+                    for i, j in strel_square9_erosion:
+                        px = x + i
+                        py = y + j
+
+                        if 0 <= px < img_width and 0 <= py < img_height:
+                            pixel_color = QtGui.QColor(img.pixel(px, py))
+                            if pixel_color.red() == 0:
+                                # Jika ada piksel hitam dalam array strel erosi, set piksel erosi ke hitam (0, 0, 0)
+                                eroded_qimage.setPixel(
+                                    x, y, QtGui.qRgb(0, 0, 0))
+
+            # Buat gambar sementara untuk hasil dilasi
+            dilated_qimage = QImage(img_width, img_height, QImage.Format_RGB32)
+
+            for x in range(img_width):
+                for y in range(img_height):
+                    # Inisialisasi nilai piksel dilasi ke hitam (0, 0, 0)
+                    dilated_qimage.setPixel(x, y, QtGui.qRgb(0, 0, 0))
+
+                    # Cek piksel-piksel sekitarnya sesuai dengan array strel square 9x9 untuk dilasi
+                    for i, j in strel_square9_dilation:
+                        px = x + i
+                        py = y + j
+
+                        if 0 <= px < img_width and 0 <= py < img_height:
+                            pixel_color = QtGui.QColor(
+                                eroded_qimage.pixel(px, py))
+                            if pixel_color.red() == 255:
+                                # Jika ada piksel putih dalam array strel dilasi, set piksel dilasi ke putih (255, 255, 255)
+                                dilated_qimage.setPixel(
+                                    x, y, QtGui.qRgb(255, 255, 255))
+
+            # Konversi QImage ke QPixmap untuk menampilkannya di QLabel
+            opened_pixmap = QPixmap.fromImage(dilated_qimage)
+
+            # Menampilkan hasil opening di QLabel
+            self.label_gambar_tujuan.setPixmap(opened_pixmap)
+            self.label_gambar_tujuan.setScaledContents(True)
+            self.displayed_pixmap = opened_pixmap
 
     def erosi_square_3x3(self):
         img = self.label_gambar_asal.pixmap().toImage()
